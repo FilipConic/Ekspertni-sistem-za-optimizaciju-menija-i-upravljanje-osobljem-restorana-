@@ -1,0 +1,246 @@
+package rules.forward;
+
+import com.restaurant.model.MenuItem;
+import com.restaurant.model.MenuItemFact;
+import com.restaurant.model.Shift;
+import com.restaurant.model.ShiftFact;
+import com.restaurant.model.Waiter;
+import com.restaurant.model.WaiterFact;
+import com.restaurant.model.Recommendation;
+import com.restaurant.util.DateHelper;
+import com.restaurant.model.Recommendation.Type;
+import java.time.LocalDate;
+
+global java.util.List<Recommendation> recommendations;
+
+rule "Level 1 - Calculate Profit Margin"
+    salience 100
+    when
+        $item : MenuItem($name : name, $price : price, $cost : preparationCost)
+        not MenuItemFact(menuItemName == $name)
+    then
+        MenuItemFact fact = new MenuItemFact();
+        fact.setMenuItemName($name);
+        fact.setProfitMargin(($price - $cost) / $price);
+        insert(fact);
+end
+
+rule "Level 1 - Calculate Earning by Guest"
+    salience 100
+    when
+        $shift : Shift($date : date, $waiters : waiters, $guests : guestCount, $earnings : totalEarnings)
+        not ShiftFact(date == $date)
+        eval($guests > 0)
+    then
+        ShiftFact fact = new ShiftFact();
+        fact.setDate($date);
+        fact.setWaiterNames($waiters);
+        fact.setEarningsPerGuest($earnings / $guests);
+        insert(fact);
+end
+
+
+rule "Level 2 - Mark Bestseller"
+    salience 80
+    when
+        $item : MenuItem($name : name, weeklySales >= 30)
+        $fact : MenuItemFact(menuItemName == $name)
+    then
+        modify($fact) { setBestseller(true) }
+end
+
+rule "Level 2 - Mark Unprofitable"
+    salience 80
+    when
+        $item : MenuItem($name : name, weeklySales < 20)
+        $fact : MenuItemFact(menuItemName == $name, profitMargin < 0.2)
+    then
+        modify($fact) { setUnprofitable(true) }
+end
+
+rule "Level 2 - Mark High Potential"
+    salience 80
+    when
+        $item : MenuItem($name : name, weeklySales < 15)
+        $fact : MenuItemFact(menuItemName == $name, profitMargin > 0.4)
+    then
+        modify($fact) { setHighPotential(true) }
+end
+
+rule "Level 2 - Mark Bad Shift"
+    salience 80
+    when
+        $avg : Number() from accumulate(
+            ShiftFact($epg : earningsPerGuest),
+            average($epg)
+        )
+        $fact : ShiftFact($epg : earningsPerGuest, badShift == false)
+        eval($epg < $avg.doubleValue() * 0.7)
+    then
+        modify($fact) { setBadShift(true) }
+end
+
+rule "Level 2 - Mark Good Shift"
+    salience 80
+    when
+        $avg : Number() from accumulate(
+            ShiftFact($epg : earningsPerGuest),
+            average($epg)
+        )
+        $fact : ShiftFact($epg : earningsPerGuest, goodShift == false)
+        eval($epg > $avg.doubleValue() * 1.2)
+    then
+        modify($fact) { setGoodShift(true) }
+end
+
+rule "Level 2 - Mark Problematic Waiter"
+    salience 80
+    when
+        $waiter : Waiter($name : name, guestRating < 3.0, avgTablesPerShift < 5.0)
+        not WaiterFact(waiterName == $name)
+    then
+        WaiterFact fact = new WaiterFact();
+        fact.setWaiterName($name);
+        fact.setProblematic(true);
+        insert(fact);
+end
+
+rule "Level 2 - Mark Excellent Waiter"
+    salience 80
+    when
+        $waiter : Waiter($name : name, guestRating >= 4.5, avgTablesPerShift >= 8.0)
+        not WaiterFact(waiterName == $name)
+    then
+        WaiterFact fact = new WaiterFact();
+        fact.setWaiterName($name);
+        fact.setExcellent(true);
+        insert(fact);
+end
+
+rule "Level 3 - Mark Price Problem"
+    salience 60
+    when
+        $fact : MenuItemFact(unprofitable == true, bestseller == true, priceProblem == false)
+    then
+        modify($fact) { setPriceProblem(true) }
+end
+
+rule "Level 3 - Mark Consistently Bad Waiter"
+    salience 60
+    when
+        $waiter : WaiterFact($name : waiterName, consistentlyBad == false)
+        $count : Number() from accumulate(
+            ShiftFact(waiterNames contains $name, badShift == true,
+                      date >= DateHelper.twoWeeksAgo()),
+            count(1)
+        )
+        eval($count.intValue() >= 6)
+    then
+        modify($waiter) { setConsistentlyBad(true) }
+end
+
+rule "Level 3 - Mark Consistently Good Waiter"
+    salience 60
+    when
+        $waiter : WaiterFact($name : waiterName, consistentlyGood == false)
+        $count : Number() from accumulate(
+            ShiftFact(waiterNames contains $name, goodShift == true,
+                      date >= DateHelper.twoWeeksAgo()),
+            count(1)
+        )
+        eval($count.intValue() >= 6)
+    then
+        modify($waiter) { setConsistentlyGood(true) }
+end
+
+rule "Level 4 - Recommend Remove Item"
+    salience 40
+    when
+        $fact : MenuItemFact(unprofitable == true, priceProblem == false)
+    then
+        Recommendation rec = new Recommendation();
+        rec.setType(Type.REMOVE_ITEM);
+        rec.setSubject($fact.getMenuItemName());
+        rec.setExplanation($fact.getMenuItemName() + " je neisplativo - preporučuje se uklanjanje sa menija.");
+        insert(rec);
+        recommendations.add(rec);
+end
+
+rule "Level 4 - Recommend Change Price"
+    salience 40
+    when
+        $fact : MenuItemFact(priceProblem == true)
+    then
+        Recommendation rec = new Recommendation();
+        rec.setType(Type.CHANGE_PRICE);
+        rec.setSubject($fact.getMenuItemName());
+        rec.setExplanation($fact.getMenuItemName() + " je bestseller ali neisplativo - preporučuje se promena cene.");
+        insert(rec);
+        recommendations.add(rec);
+end
+
+rule "Level 4 - Recommend Promotion"
+    salience 40
+    when
+        $fact : MenuItemFact(highPotential == true)
+    then
+        Recommendation rec = new Recommendation();
+        rec.setType(Type.START_PROMOTION);
+        rec.setSubject($fact.getMenuItemName());
+        rec.setExplanation($fact.getMenuItemName() + " ima visok potencijal - preporučuje se pokretanje promocije.");
+        insert(rec);
+        recommendations.add(rec);
+end
+
+rule "Level 4 - Recommend Add New Item"
+    salience 40
+    when
+        $item : MenuItem($cat : category)
+        not MenuItemFact(bestseller == true)
+    then
+        Recommendation rec = new Recommendation();
+        rec.setType(Type.ADD_NEW_ITEM);
+        rec.setSubject($cat);
+        rec.setExplanation("Kategorija " + $cat + " nema bestsellera - preporučuje se dodavanje novog jela.");
+        insert(rec);
+        recommendations.add(rec);
+end
+
+rule "Level 4 - Recommend Waiter Warning"
+    salience 40
+    when
+        $fact : WaiterFact(problematic == true, consistentlyBad == false)
+    then
+        Recommendation rec = new Recommendation();
+        rec.setType(Type.WAITER_WARNING);
+        rec.setSubject($fact.getWaiterName());
+        rec.setExplanation($fact.getWaiterName() + " je problematičan - preporučuje se upozorenje.");
+        insert(rec);
+        recommendations.add(rec);
+end
+
+rule "Level 4 - Recommend Additional Training"
+    salience 40
+    when
+        $fact : WaiterFact(consistentlyBad == true)
+    then
+        Recommendation rec = new Recommendation();
+        rec.setType(Type.ADDITIONAL_TRAINING);
+        rec.setSubject($fact.getWaiterName());
+        rec.setExplanation($fact.getWaiterName() + " je konzistentno loš - preporučuje se dodatna obuka.");
+        insert(rec);
+        recommendations.add(rec);
+end
+
+rule "Level 4 - Recommend Waiter Reward"
+    salience 40
+    when
+        $fact : WaiterFact(consistentlyGood == true)
+    then
+        Recommendation rec = new Recommendation();
+        rec.setType(Type.WAITER_REWARD);
+        rec.setSubject($fact.getWaiterName());
+        rec.setExplanation($fact.getWaiterName() + " je konzistentno dobar - preporučuje se nagrada.");
+        insert(rec);
+        recommendations.add(rec);
+end
