@@ -119,4 +119,80 @@ public class BackwardChainingEngine {
         trace.add("Conclusion: " + (goodMargin ? "YES, the item should be promoted." : "NO, should not be promoted."));
         return goodMargin;
     }
+
+    // ---------------------------------------------------------------
+    // GOAL: shouldRewardWaiter(W)
+    //   shouldRewardWaiter(W) :- consistentlyGood(W) AND excellent(W)
+    //                             AND guestRating(W) >= 4.5
+    // ---------------------------------------------------------------
+    public boolean shouldRewardWaiter(int waiterId) {
+        trace.clear();
+        trace.add("GOAL: should waiter id=" + waiterId + " receive a reward?");
+
+        Optional<WaiterFact> factOpt = waiterFact(waiterId);
+        if (factOpt.isEmpty()) {
+            trace.add("  -> No WaiterFact for id=" + waiterId + " (not yet classified). NO.");
+            return false;
+        }
+        WaiterFact fact = factOpt.get();
+
+        boolean consistentlyGood = fact.isConsistentlyGood();
+        trace.add("  -> Subgoal: consistentlyGood(id=" + waiterId + ") = " + consistentlyGood);
+        if (!consistentlyGood) {
+            trace.add("Conclusion: NO, should not be rewarded (subgoal not satisfied).");
+            return false;
+        }
+
+        boolean excellent = fact.isExcellent();
+        trace.add("  -> Subgoal: excellent(id=" + waiterId + ") = " + excellent);
+        if (!excellent) {
+            trace.add("Conclusion: NO, should not be rewarded (subgoal not satisfied).");
+            return false;
+        }
+
+        double rating = rawWaiter(waiterId).map(Waiter::getGuestRating).orElse(0.0);
+        boolean highRating = rating >= 4.5;
+        trace.add("  -> Subgoal: guestRating(id=" + waiterId + ") = " + rating + " >= 4.5 -> " + highRating);
+
+        trace.add("Conclusion: " + (highRating ? "YES, the waiter should be rewarded." : "NO, should not be rewarded."));
+        return highRating;
+    }
+
+    // ---------------------------------------------------------------
+    // GOAL: shouldRemoveItem(I)
+    //   shouldRemoveItem(I) :- unprofitable(I) AND NOT priceProblem(I)
+    //                           AND profitMargin(I) < 0.15
+    // ---------------------------------------------------------------
+    public boolean shouldRemoveItem(String name) {
+        trace.clear();
+        trace.add("GOAL: should item '" + name + "' be removed from the menu?");
+
+        Optional<MenuItemFact> factOpt = menuItemFact(name);
+        if (factOpt.isEmpty()) {
+            trace.add("  -> No MenuItemFact for '" + name + "'. NO.");
+            return false;
+        }
+        MenuItemFact fact = factOpt.get();
+
+        boolean unprofitable = fact.isUnprofitable();
+        trace.add("  -> Subgoal: unprofitable('" + name + "') = " + unprofitable);
+        if (!unprofitable) {
+            trace.add("Conclusion: NO, should not be removed (subgoal not satisfied).");
+            return false;
+        }
+
+        boolean priceProblem = fact.isPriceProblem();
+        trace.add("  -> Subgoal: NOT priceProblem('" + name + "') = " + !priceProblem);
+        if (priceProblem) {
+            trace.add("Conclusion: NO, should not be removed (it's a bestseller - fix the price instead).");
+            return false;
+        }
+
+        double margin = fact.getProfitMargin();
+        boolean veryLowMargin = margin < 0.15;
+        trace.add("  -> Subgoal: profitMargin('" + name + "') = " + margin + " < 0.15 -> " + veryLowMargin);
+
+        trace.add("Conclusion: " + (veryLowMargin ? "YES, the item should be removed." : "NO, should not be removed."));
+        return veryLowMargin;
+    }
 }

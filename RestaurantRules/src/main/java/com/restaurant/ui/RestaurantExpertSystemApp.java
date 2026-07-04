@@ -59,9 +59,26 @@ public class RestaurantExpertSystemApp extends JFrame {
 
     private final DefaultListModel<Waiter> waiterListModel = new DefaultListModel<>();
     private final DefaultComboBoxModel<Waiter> waiterComboModel = new DefaultComboBoxModel<>();
+    private final DefaultComboBoxModel<MenuItem> menuItemComboModel = new DefaultComboBoxModel<>();
 
     private static final ListCellRenderer<Object> WAITER_RENDERER = (list, value, index, isSelected, cellHasFocus) -> {
         String text = value == null ? "" : ((Waiter) value).getName() + "  (id=" + ((Waiter) value).getId() + ")";
+        JLabel label = new JLabel(text);
+        label.setFont(FIELD_FONT);
+        label.setBorder(new EmptyBorder(6, 10, 6, 10));
+        label.setOpaque(true);
+        if (isSelected) {
+            label.setBackground(list.getSelectionBackground());
+            label.setForeground(list.getSelectionForeground());
+        } else {
+            label.setBackground(list.getBackground());
+            label.setForeground(list.getForeground());
+        }
+        return label;
+    };
+
+    private static final ListCellRenderer<Object> MENU_ITEM_RENDERER = (list, value, index, isSelected, cellHasFocus) -> {
+        String text = value == null ? "" : ((MenuItem) value).getName() + "  (id=" + ((MenuItem) value).getId() + ")";
         JLabel label = new JLabel(text);
         label.setFont(FIELD_FONT);
         label.setBorder(new EmptyBorder(6, 10, 6, 10));
@@ -123,6 +140,7 @@ public class RestaurantExpertSystemApp extends JFrame {
             session.insert(s);
         }
         refreshWaiterWidgets();
+        refreshMenuItemWidgets();
     }
 
     private void refreshWaiterWidgets() {
@@ -131,6 +149,13 @@ public class RestaurantExpertSystemApp extends JFrame {
         for (Waiter w : waitersById.values()) {
             waiterListModel.addElement(w);
             waiterComboModel.addElement(w);
+        }
+    }
+
+    private void refreshMenuItemWidgets() {
+        menuItemComboModel.removeAllElements();
+        for (MenuItem m : menuItemsById.values()) {
+            menuItemComboModel.addElement(m);
         }
     }
 
@@ -270,7 +295,7 @@ public class RestaurantExpertSystemApp extends JFrame {
         int choice = JOptionPane.showConfirmDialog(this,
                 "Delete " + description + "? This cannot be undone.",
                 "Confirm delete", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-        return choice != JOptionPane.YES_OPTION;
+        return choice == JOptionPane.YES_OPTION;
     }
 
     private JPanel buttonRow(JComponent... components) {
@@ -321,7 +346,7 @@ public class RestaurantExpertSystemApp extends JFrame {
     private String formatTableSeparator(int[] widths) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < widths.length; i++) {
-            sb.repeat("-", widths[i]);
+            sb.append("-".repeat(widths[i]));
             if (i < widths.length - 1) sb.append("-+-");
         }
         return sb.toString();
@@ -390,7 +415,7 @@ public class RestaurantExpertSystemApp extends JFrame {
                 int id = Integer.parseInt(deleteId.getText().trim());
                 Waiter existing = waitersById.get(id);
                 String label = "waiter id=" + id + (existing != null ? " (" + existing.getName() + ")" : "");
-                if (confirmDelete(label)) return;
+                if (!confirmDelete(label)) return;
 
                 waiterRepository.delete(id); // cascades shift_waiter_link via ON DELETE CASCADE
                 int retracted = retractMatchingFacts(o -> o instanceof Waiter && ((Waiter) o).getId() == id);
@@ -480,7 +505,7 @@ public class RestaurantExpertSystemApp extends JFrame {
                 int id = Integer.parseInt(deleteId.getText().trim());
                 Shift existing = shiftsById.get(id);
                 String label = "shift id=" + id;
-                if (confirmDelete(label)) return;
+                if (!confirmDelete(label)) return;
 
                 shiftRepository.delete(id); // cascades shift_waiter_link via ON DELETE CASCADE
                 int retracted = retractMatchingFacts(o -> o instanceof Shift && ((Shift) o).getId() == id);
@@ -534,6 +559,7 @@ public class RestaurantExpertSystemApp extends JFrame {
 
                 menuItemRepository.save(m); // sets m.id via generated key
                 menuItemsById.put(m.getId(), m);
+                refreshMenuItemWidgets();
 
                 session.insert(m);
                 log("[+] Saved menu item: " + m.getName() + " (id=" + m.getId() + ")");
@@ -568,7 +594,7 @@ public class RestaurantExpertSystemApp extends JFrame {
                 int id = Integer.parseInt(deleteId.getText().trim());
                 MenuItem existing = menuItemsById.get(id);
                 String label = "menu item id=" + id + (existing != null ? " (" + existing.getName() + ")" : "");
-                if (confirmDelete(label)) return;
+                if (!confirmDelete(label)) return;
 
                 menuItemRepository.delete(id);
                 int retracted = retractMatchingFacts(o -> o instanceof MenuItem && ((MenuItem) o).getId() == id);
@@ -577,6 +603,7 @@ public class RestaurantExpertSystemApp extends JFrame {
                             && existing.getName().equals(((MenuItemFact) o).getMenuItemName()));
                 }
                 menuItemsById.remove(id);
+                refreshMenuItemWidgets();
 
                 log("[-] Deleted " + label + " (" + retracted + " fact(s) retracted from session)");
             } catch (Exception ex) {
@@ -617,7 +644,9 @@ public class RestaurantExpertSystemApp extends JFrame {
 
         JComboBox<String> goal = new JComboBox<>(new String[]{
                 "Should this waiter be fired?",
-                "Should this menu item be promoted?"
+                "Should this waiter receive a reward?",
+                "Should this menu item be promoted?",
+                "Should this menu item be removed?"
         });
         goal.setFont(FIELD_FONT);
         goal.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -629,30 +658,88 @@ public class RestaurantExpertSystemApp extends JFrame {
         waiterCombo.setAlignmentX(Component.LEFT_ALIGNMENT);
         waiterCombo.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
 
-        JTextField itemName = createTextField();
+        JComboBox<MenuItem> itemCombo = new JComboBox<>(menuItemComboModel);
+        itemCombo.setRenderer(MENU_ITEM_RENDERER);
+        itemCombo.setFont(FIELD_FONT);
+        itemCombo.setAlignmentX(Component.LEFT_ALIGNMENT);
+        itemCombo.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
+
+        JPanel waiterInputPanel = new JPanel();
+        waiterInputPanel.setLayout(new BoxLayout(waiterInputPanel, BoxLayout.Y_AXIS));
+        waiterInputPanel.setOpaque(false);
+        waiterInputPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        waiterInputPanel.add(createLabel("Waiter"));
+        waiterInputPanel.add(waiterCombo);
+
+        JPanel itemInputPanel = new JPanel();
+        itemInputPanel.setLayout(new BoxLayout(itemInputPanel, BoxLayout.Y_AXIS));
+        itemInputPanel.setOpaque(false);
+        itemInputPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        itemInputPanel.add(createLabel("Menu item"));
+        itemInputPanel.add(itemCombo);
 
         panel.add(createLabel("Goal"));
         panel.add(goal);
-        panel.add(createLabel("Waiter (for goal 1)"));
-        panel.add(waiterCombo);
-        panel.add(createLabel("Item name (for goal 2)"));
-        panel.add(itemName);
+        panel.add(waiterInputPanel);
+        panel.add(itemInputPanel);
         panel.add(Box.createVerticalStrut(16));
+
+        // Goals 0-1 need a waiter, goals 2-3 need a menu item name -
+        // only show the input that's actually relevant to the current goal.
+        Runnable updateVisibleInput = () -> {
+            boolean isWaiterGoal = goal.getSelectedIndex() <= 1;
+            waiterInputPanel.setVisible(isWaiterGoal);
+            itemInputPanel.setVisible(!isWaiterGoal);
+            panel.revalidate();
+            panel.repaint();
+        };
+        goal.addActionListener(e -> updateVisibleInput.run());
+        updateVisibleInput.run(); // correct initial state for the default selection
 
         JButton ask = createButton("Ask");
         ask.addActionListener(e -> {
             BackwardChainingEngine engine = new BackwardChainingEngine(session);
             boolean result;
             log("=== BACKWARD CHAINING ===");
-            if (goal.getSelectedIndex() == 0) {
-                Waiter selected = (Waiter) waiterCombo.getSelectedItem();
-                if (selected == null) {
-                    log("Add at least one waiter first.");
-                    return;
+            switch (goal.getSelectedIndex()) {
+                case 0: {
+                    Waiter selected = (Waiter) waiterCombo.getSelectedItem();
+                    if (selected == null) {
+                        log("Add at least one waiter first.");
+                        return;
+                    }
+                    result = engine.shouldFireWaiter(selected.getId());
+                    break;
                 }
-                result = engine.shouldFireWaiter(selected.getId());
-            } else {
-                result = engine.shouldPromoteItem(itemName.getText().trim());
+                case 1: {
+                    Waiter selected = (Waiter) waiterCombo.getSelectedItem();
+                    if (selected == null) {
+                        log("Add at least one waiter first.");
+                        return;
+                    }
+                    result = engine.shouldRewardWaiter(selected.getId());
+                    break;
+                }
+                case 2: {
+                    MenuItem selected = (MenuItem) itemCombo.getSelectedItem();
+                    if (selected == null) {
+                        log("Add at least one menu item first.");
+                        return;
+                    }
+                    result = engine.shouldPromoteItem(selected.getName());
+                    break;
+                }
+                case 3: {
+                    MenuItem selected = (MenuItem) itemCombo.getSelectedItem();
+                    if (selected == null) {
+                        log("Add at least one menu item first.");
+                        return;
+                    }
+                    result = engine.shouldRemoveItem(selected.getName());
+                    break;
+                }
+                default:
+                    throw new IllegalStateException("Unknown goal index: " + goal.getSelectedIndex());
             }
             for (String step : engine.getTrace()) log(step);
             log("ANSWER: " + (result ? "YES" : "NO"));
@@ -727,11 +814,11 @@ public class RestaurantExpertSystemApp extends JFrame {
     }
 
     public static void main(String[] args) {
-        try {
-            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-        } catch (Exception ignored) {
-            // fall back to default look and feel
-        }
+        // Deliberately NOT using the system look and feel here: on Linux it
+        // resolves to GTK, which ignores JButton.setBackground/setForeground
+        // entirely (delegates painting to the native GTK theme engine). The
+        // default cross-platform (Metal) look and feel honors our custom
+        // button colors, so we stick with it.
         SwingUtilities.invokeLater(() -> {
             try {
                 new RestaurantExpertSystemApp().setVisible(true);
