@@ -10,12 +10,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * Backward-chaining resolver - a plain Java class rather than Drools DRL,
- * since Drools is a forward-chaining engine and doesn't cleanly support
- * goal-driven ("does G hold?") resolution. Waiter goals are keyed by id;
- * menu item goals stay name-keyed since MenuItemFact was never changed.
- */
 public class BackwardChainingEngine {
 
     private final KieSession session;
@@ -44,11 +38,6 @@ public class BackwardChainingEngine {
                 .stream().map(o -> (Waiter) o).findFirst();
     }
 
-    // ---------------------------------------------------------------
-    // GOAL: shouldFireWaiter(W)
-    //   shouldFireWaiter(W) :- consistentlyBad(W) AND problematic(W)
-    //                           AND guestRating(W) < 2.5
-    // ---------------------------------------------------------------
     public boolean shouldFireWaiter(int waiterId) {
         trace.clear();
         trace.add("GOAL: should waiter id=" + waiterId + " be fired?");
@@ -82,11 +71,6 @@ public class BackwardChainingEngine {
         return lowRating;
     }
 
-    // ---------------------------------------------------------------
-    // GOAL: shouldPromoteItem(I) - still name-keyed
-    //   shouldPromoteItem(I) :- highPotential(I) AND NOT bestseller(I)
-    //                            AND profitMargin(I) > 0.3
-    // ---------------------------------------------------------------
     public boolean shouldPromoteItem(String name) {
         trace.clear();
         trace.add("GOAL: should item '" + name + "' be promoted?");
@@ -120,11 +104,6 @@ public class BackwardChainingEngine {
         return goodMargin;
     }
 
-    // ---------------------------------------------------------------
-    // GOAL: shouldRewardWaiter(W)
-    //   shouldRewardWaiter(W) :- consistentlyGood(W) AND excellent(W)
-    //                             AND guestRating(W) >= 4.5
-    // ---------------------------------------------------------------
     public boolean shouldRewardWaiter(int waiterId) {
         trace.clear();
         trace.add("GOAL: should waiter id=" + waiterId + " receive a reward?");
@@ -158,11 +137,6 @@ public class BackwardChainingEngine {
         return highRating;
     }
 
-    // ---------------------------------------------------------------
-    // GOAL: shouldRemoveItem(I)
-    //   shouldRemoveItem(I) :- unprofitable(I) AND NOT priceProblem(I)
-    //                           AND profitMargin(I) < 0.15
-    // ---------------------------------------------------------------
     public boolean shouldRemoveItem(String name) {
         trace.clear();
         trace.add("GOAL: should item '" + name + "' be removed from the menu?");

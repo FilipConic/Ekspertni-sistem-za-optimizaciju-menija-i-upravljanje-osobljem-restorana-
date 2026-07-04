@@ -4,12 +4,6 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
-/**
- * A CEP event: a point-in-time reading of how many guests are currently
- * being served on a shift vs how many waiters are actively working it.
- * shiftId here is just a correlation key for the event stream (it doesn't
- * have to reference a persisted Shift row) - kept as int to match Shift.id.
- */
 @Data
 public class StaffingSnapshotEvent {
     private int shiftId;

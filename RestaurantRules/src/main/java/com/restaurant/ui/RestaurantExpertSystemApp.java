@@ -24,17 +24,8 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.kie.api.runtime.rule.FactHandle;
 
-/**
- * Swing front-end backed by SQLite persistence (main.db).
- * On startup: opens/creates the DB, creates the three repositories, then
- * loads every previously saved Waiter/MenuItem/Shift into the KieSession
- * so forward/backward chaining sees historical data immediately.
- * On "Add ...": persists to SQLite first (so the row gets a real
- * generated id back), then inserts the same object into the session.
- */
 public class RestaurantExpertSystemApp extends JFrame {
 
-    // ---- Styling constants ----
     private static final Color ACCENT_COLOR = new Color(0xD3, 0x54, 0x00);
     private static final Color DANGER_COLOR = new Color(0xC0, 0x39, 0x2B);
     private static final Color BACKGROUND_COLOR = new Color(0xFA, 0xFA, 0xFA);
@@ -187,10 +178,6 @@ public class RestaurantExpertSystemApp extends JFrame {
         output.setCaretPosition(output.getDocument().getLength());
     }
 
-    // ---------------------------------------------------------------
-    // Styling helpers
-    // ---------------------------------------------------------------
-
     private JPanel tabPanel() {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
@@ -275,14 +262,6 @@ public class RestaurantExpertSystemApp extends JFrame {
         return field;
     }
 
-    /**
-     * Retracts every fact in the live session matching the predicate.
-     * Used on delete so stale derived facts (WaiterFact/ShiftFact/
-     * MenuItemFact) don't linger in working memory after their source
-     * row is removed from the database. Drools' plain insert() (not
-     * insertLogical()) means this cleanup has to be done manually -
-     * deleting a Waiter does NOT automatically retract its WaiterFact.
-     */
     private int retractMatchingFacts(Predicate<Object> predicate) {
         List<FactHandle> toDelete = new ArrayList<>(session.getFactHandles(predicate::test));
         for (FactHandle handle : toDelete) {
@@ -310,7 +289,6 @@ public class RestaurantExpertSystemApp extends JFrame {
         return row;
     }
 
-    /** Pretty-prints a list of rows as an aligned, monospace-friendly table into the log. */
     private void printTable(String title, String[] headers, List<Object[]> rows) {
         log("");
         log("=== " + title + " (" + rows.size() + ") ===");
@@ -352,10 +330,6 @@ public class RestaurantExpertSystemApp extends JFrame {
         return sb.toString();
     }
 
-    // ---------------------------------------------------------------
-    // Entity forms
-    // ---------------------------------------------------------------
-
     private JPanel buildWaiterForm() {
         JTextField name = createTextField();
         JTextField rating = createTextField();
@@ -378,7 +352,7 @@ public class RestaurantExpertSystemApp extends JFrame {
                 w.setAvgTablesPerShift(Double.parseDouble(tables.getText().trim()));
                 w.setAvgOrderValue(Double.parseDouble(orderValue.getText().trim()));
 
-                waiterRepository.save(w); // sets w.id via generated key
+                waiterRepository.save(w);
                 waitersById.put(w.getId(), w);
                 refreshWaiterWidgets();
 
@@ -417,7 +391,7 @@ public class RestaurantExpertSystemApp extends JFrame {
                 String label = "waiter id=" + id + (existing != null ? " (" + existing.getName() + ")" : "");
                 if (!confirmDelete(label)) return;
 
-                waiterRepository.delete(id); // cascades shift_waiter_link via ON DELETE CASCADE
+                waiterRepository.delete(id);
                 int retracted = retractMatchingFacts(o -> o instanceof Waiter && ((Waiter) o).getId() == id);
                 retracted += retractMatchingFacts(o -> o instanceof WaiterFact && ((WaiterFact) o).getWaiterId() == id);
                 waitersById.remove(id);
@@ -466,7 +440,7 @@ public class RestaurantExpertSystemApp extends JFrame {
                 s.setTotalEarnings(Double.parseDouble(earnings.getText().trim()));
                 s.setWaiterIds(waiterIds);
 
-                shiftRepository.save(s); // sets s.id via generated key
+                shiftRepository.save(s);
                 for (int waiterId : waiterIds) {
                     shiftRepository.connectWaiter(s.getId(), waiterId);
                 }
@@ -507,10 +481,8 @@ public class RestaurantExpertSystemApp extends JFrame {
                 String label = "shift id=" + id;
                 if (!confirmDelete(label)) return;
 
-                shiftRepository.delete(id); // cascades shift_waiter_link via ON DELETE CASCADE
+                shiftRepository.delete(id);
                 int retracted = retractMatchingFacts(o -> o instanceof Shift && ((Shift) o).getId() == id);
-                // ShiftFact is keyed by date, not id - only safe to retract if no OTHER
-                // shift shares that same date (rare, but possible with manual test data).
                 if (existing != null) {
                     long sameDateCount = shiftsById.values().stream()
                             .filter(s -> s.getId() != id && existing.getDate().equals(s.getDate()))
@@ -557,7 +529,7 @@ public class RestaurantExpertSystemApp extends JFrame {
                 m.setWeeklySales(Integer.parseInt(sales.getText().trim()));
                 m.setCategory(category.getText().trim());
 
-                menuItemRepository.save(m); // sets m.id via generated key
+                menuItemRepository.save(m);
                 menuItemsById.put(m.getId(), m);
                 refreshMenuItemWidgets();
 
@@ -615,10 +587,6 @@ public class RestaurantExpertSystemApp extends JFrame {
         return panel;
     }
 
-    // ---------------------------------------------------------------
-    // Forward chaining
-    // ---------------------------------------------------------------
-
     private JPanel buildForwardPanel() {
         JPanel panel = tabPanel();
         JButton run = createButton("Run Forward Chaining");
@@ -634,10 +602,6 @@ public class RestaurantExpertSystemApp extends JFrame {
         panel.add(run);
         return panel;
     }
-
-    // ---------------------------------------------------------------
-    // Backward chaining
-    // ---------------------------------------------------------------
 
     private JPanel buildBackwardPanel() {
         JPanel panel = tabPanel();
@@ -684,8 +648,6 @@ public class RestaurantExpertSystemApp extends JFrame {
         panel.add(itemInputPanel);
         panel.add(Box.createVerticalStrut(16));
 
-        // Goals 0-1 need a waiter, goals 2-3 need a menu item name -
-        // only show the input that's actually relevant to the current goal.
         Runnable updateVisibleInput = () -> {
             boolean isWaiterGoal = goal.getSelectedIndex() <= 1;
             waiterInputPanel.setVisible(isWaiterGoal);
@@ -694,7 +656,7 @@ public class RestaurantExpertSystemApp extends JFrame {
             panel.repaint();
         };
         goal.addActionListener(e -> updateVisibleInput.run());
-        updateVisibleInput.run(); // correct initial state for the default selection
+        updateVisibleInput.run();
 
         JButton ask = createButton("Ask");
         ask.addActionListener(e -> {
@@ -750,10 +712,6 @@ public class RestaurantExpertSystemApp extends JFrame {
         return panel;
     }
 
-    // ---------------------------------------------------------------
-    // CEP demo
-    // ---------------------------------------------------------------
-
     private JPanel buildCepPanel() {
         JTextField shiftId = createTextField();
         JTextField guestCount = createTextField();
@@ -804,21 +762,12 @@ public class RestaurantExpertSystemApp extends JFrame {
         return send;
     }
 
-    // ---------------------------------------------------------------
-    // Helpers
-    // ---------------------------------------------------------------
-
     private void showError(Exception ex) {
         JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage(),
                 "Error", JOptionPane.ERROR_MESSAGE);
     }
 
     public static void main(String[] args) {
-        // Deliberately NOT using the system look and feel here: on Linux it
-        // resolves to GTK, which ignores JButton.setBackground/setForeground
-        // entirely (delegates painting to the native GTK theme engine). The
-        // default cross-platform (Metal) look and feel honors our custom
-        // button colors, so we stick with it.
         SwingUtilities.invokeLater(() -> {
             try {
                 new RestaurantExpertSystemApp().setVisible(true);

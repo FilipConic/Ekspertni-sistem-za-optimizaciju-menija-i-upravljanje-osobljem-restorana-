@@ -37,12 +37,6 @@ public class ShiftRepository {
         }
     }
 
-    /**
-     * Inserts the shift row and writes the generated id back onto `shift`.
-     * Does NOT persist waiter links - call connectWaiter(...) separately
-     * for each waiter on the shift (needs shift.getId() to be set first,
-     * which this method takes care of).
-     */
     public void save(Shift shift) throws SQLException {
         try (var stmt = this.connection.prepareStatement(
                 "INSERT INTO shift(date, guest_count, total_earnings) VALUES(?, ?, ?);",
