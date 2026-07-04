@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class Waiter {
+    private int id;
     private String name;
     private double avgTablesPerShift;
     private double avgOrderValue;

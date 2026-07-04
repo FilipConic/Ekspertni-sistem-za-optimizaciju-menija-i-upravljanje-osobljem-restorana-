@@ -1,0 +1,48 @@
+package rules.cep
+
+import com.restaurant.model.StaffingSnapshotEvent
+import com.restaurant.model.SurgePricingActive
+import com.restaurant.model.Recommendation
+import com.restaurant.model.Recommendation.Type
+
+global java.util.List recommendations
+
+declare StaffingSnapshotEvent
+    @role( event )
+    @expires( 5m )
+end
+
+rule "CEP - Sustained High Guest-to-Waiter Ratio Triggers Surge Pricing"
+    salience 50
+    when
+        $event : StaffingSnapshotEvent($sid : shiftId)
+        $avgRatio : Double() from accumulate(
+            StaffingSnapshotEvent(shiftId == $sid, $r : ratio) over window:time(20s),
+            average($r)
+        )
+        eval($avgRatio >= 3.0)
+        not SurgePricingActive(shiftId == $sid)
+    then
+        insert(new SurgePricingActive($sid));
+
+        Recommendation rec = new Recommendation();
+        rec.setType(Type.SURGE_PRICING);
+        rec.setSubject(String.valueOf($sid));
+        rec.setExplanation("Shift " + $sid + " has an average guest-to-waiter ratio of "
+                + String.format("%.1f", $avgRatio) + " over the last 20s - surge pricing is recommended.");
+        insert(rec);
+        recommendations.add(rec);
+end
+
+rule "CEP - Clear Surge Pricing When Ratio Normalizes"
+    salience 50
+    when
+        $marker : SurgePricingActive($sid : shiftId)
+        $avgRatio : Double() from accumulate(
+            StaffingSnapshotEvent(shiftId == $sid, $r : ratio) over window:time(20s),
+            average($r)
+        )
+        eval($avgRatio < 2.0)
+    then
+        retract($marker);
+end

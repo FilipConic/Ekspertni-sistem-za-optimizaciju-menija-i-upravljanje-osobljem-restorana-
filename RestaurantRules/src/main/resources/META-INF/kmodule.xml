@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <kmodule xmlns="http://www.drools.org/xsd/kmodule">
-    <kbase name="restaurantKBase" packages="rules.forward">
+    <kbase name="restaurantKBase" packages="rules.forward,rules.cep" eventProcessingMode="stream">
         <ksession name="restaurantKSession" type="stateful" default="true"/>
     </kbase>
 </kmodule>

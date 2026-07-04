@@ -17,6 +17,7 @@ public class Recommendation {
         ADDITIONAL_TRAINING,
         WAITER_REWARD,
         RESCHEDULE_WAITER,
+        SURGE_PRICING,
     }
 
     private Type type;

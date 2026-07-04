@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class WaiterFact {
+    private int waiterId;
     private String waiterName;
     private boolean problematic;
     private boolean excellent;

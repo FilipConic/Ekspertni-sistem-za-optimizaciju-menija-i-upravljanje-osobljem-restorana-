@@ -11,8 +11,9 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class Shift {
+    private int id;
     private LocalDate date;
-    private List<String> waiters;
+    private List<Integer> waiterIds;
     private int guestCount;
     private double totalEarnings;
 }

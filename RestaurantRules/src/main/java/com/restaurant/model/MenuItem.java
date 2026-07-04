@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class MenuItem {
+    private int id;
     private String name;
     private String category;
     private double price;

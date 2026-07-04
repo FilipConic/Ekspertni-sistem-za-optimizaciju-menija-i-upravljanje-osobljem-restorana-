@@ -12,7 +12,7 @@ import java.util.List;
 @AllArgsConstructor
 public class ShiftFact {
     private LocalDate date;
-    private List<String> waiterNames;
+    private List<Integer> waiterIds;
     private double earningsPerGuest;
     private boolean goodShift;
     private boolean badShift;

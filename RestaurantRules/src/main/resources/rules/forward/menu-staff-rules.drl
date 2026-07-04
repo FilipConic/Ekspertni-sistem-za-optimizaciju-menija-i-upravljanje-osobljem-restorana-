@@ -28,13 +28,13 @@ end
 rule "Level 1 - Calculate Earning by Guest"
     salience 100
     when
-        $shift : Shift($date : date, $waiters : waiters, $guests : guestCount, $earnings : totalEarnings)
+        $shift : Shift($date : date, $waiterIds : waiterIds, $guests : guestCount, $earnings : totalEarnings)
         not ShiftFact(date == $date)
         eval($guests > 0)
     then
         ShiftFact fact = new ShiftFact();
         fact.setDate($date);
-        fact.setWaiterNames($waiters);
+        fact.setWaiterIds($waiterIds);
         fact.setEarningsPerGuest($earnings / $guests);
         insert(fact);
 end
@@ -96,10 +96,11 @@ end
 rule "Level 2 - Mark Problematic Waiter"
     salience 80
     when
-        $waiter : Waiter($name : name, guestRating < 3.0, avgTablesPerShift < 5.0)
-        not WaiterFact(waiterName == $name)
+        $waiter : Waiter($id : id, $name : name, guestRating < 3.0, avgTablesPerShift < 5.0)
+        not WaiterFact(waiterId == $id)
     then
         WaiterFact fact = new WaiterFact();
+        fact.setWaiterId($id);
         fact.setWaiterName($name);
         fact.setProblematic(true);
         insert(fact);
@@ -108,10 +109,11 @@ end
 rule "Level 2 - Mark Excellent Waiter"
     salience 80
     when
-        $waiter : Waiter($name : name, guestRating >= 4.5, avgTablesPerShift >= 8.0)
-        not WaiterFact(waiterName == $name)
+        $waiter : Waiter($id : id, $name : name, guestRating >= 4.5, avgTablesPerShift >= 8.0)
+        not WaiterFact(waiterId == $id)
     then
         WaiterFact fact = new WaiterFact();
+        fact.setWaiterId($id);
         fact.setWaiterName($name);
         fact.setExcellent(true);
         insert(fact);
@@ -128,9 +130,9 @@ end
 rule "Level 3 - Mark Consistently Bad Waiter"
     salience 60
     when
-        $waiter : WaiterFact($name : waiterName, consistentlyBad == false)
+        $waiter : WaiterFact($id : waiterId, consistentlyBad == false)
         $count : Number() from accumulate(
-            ShiftFact(waiterNames contains $name, badShift == true,
+            ShiftFact(waiterIds contains $id, badShift == true,
                       date >= DateHelper.twoWeeksAgo()),
             count(1)
         )
@@ -142,9 +144,9 @@ end
 rule "Level 3 - Mark Consistently Good Waiter"
     salience 60
     when
-        $waiter : WaiterFact($name : waiterName, consistentlyGood == false)
+        $waiter : WaiterFact($id : waiterId, consistentlyGood == false)
         $count : Number() from accumulate(
-            ShiftFact(waiterNames contains $name, goodShift == true,
+            ShiftFact(waiterIds contains $id, goodShift == true,
                       date >= DateHelper.twoWeeksAgo()),
             count(1)
         )
@@ -161,7 +163,7 @@ rule "Level 4 - Recommend Remove Item"
         Recommendation rec = new Recommendation();
         rec.setType(Type.REMOVE_ITEM);
         rec.setSubject($fact.getMenuItemName());
-        rec.setExplanation($fact.getMenuItemName() + " je neisplativo - preporučuje se uklanjanje sa menija.");
+        rec.setExplanation($fact.getMenuItemName() + " is unprofitable - recommend removing it from the menu.");
         insert(rec);
         recommendations.add(rec);
 end
@@ -174,7 +176,7 @@ rule "Level 4 - Recommend Change Price"
         Recommendation rec = new Recommendation();
         rec.setType(Type.CHANGE_PRICE);
         rec.setSubject($fact.getMenuItemName());
-        rec.setExplanation($fact.getMenuItemName() + " je bestseller ali neisplativo - preporučuje se promena cene.");
+        rec.setExplanation($fact.getMenuItemName() + " is a bestseller but unprofitable - recommend changing the price.");
         insert(rec);
         recommendations.add(rec);
 end
@@ -187,7 +189,7 @@ rule "Level 4 - Recommend Promotion"
         Recommendation rec = new Recommendation();
         rec.setType(Type.START_PROMOTION);
         rec.setSubject($fact.getMenuItemName());
-        rec.setExplanation($fact.getMenuItemName() + " ima visok potencijal - preporučuje se pokretanje promocije.");
+        rec.setExplanation($fact.getMenuItemName() + " has high potential - recommend starting a promotion.");
         insert(rec);
         recommendations.add(rec);
 end
@@ -201,7 +203,7 @@ rule "Level 4 - Recommend Add New Item"
         Recommendation rec = new Recommendation();
         rec.setType(Type.ADD_NEW_ITEM);
         rec.setSubject($cat);
-        rec.setExplanation("Kategorija " + $cat + " nema bestsellera - preporučuje se dodavanje novog jela.");
+        rec.setExplanation("Category " + $cat + " has no bestseller - recommend adding a new dish.");
         insert(rec);
         recommendations.add(rec);
 end
@@ -214,7 +216,7 @@ rule "Level 4 - Recommend Waiter Warning"
         Recommendation rec = new Recommendation();
         rec.setType(Type.WAITER_WARNING);
         rec.setSubject($fact.getWaiterName());
-        rec.setExplanation($fact.getWaiterName() + " je problematičan - preporučuje se upozorenje.");
+        rec.setExplanation($fact.getWaiterName() + " is problematic - recommend a warning.");
         insert(rec);
         recommendations.add(rec);
 end
@@ -227,7 +229,7 @@ rule "Level 4 - Recommend Additional Training"
         Recommendation rec = new Recommendation();
         rec.setType(Type.ADDITIONAL_TRAINING);
         rec.setSubject($fact.getWaiterName());
-        rec.setExplanation($fact.getWaiterName() + " je konzistentno loš - preporučuje se dodatna obuka.");
+        rec.setExplanation($fact.getWaiterName() + " is consistently underperforming - recommend additional training.");
         insert(rec);
         recommendations.add(rec);
 end
@@ -240,7 +242,7 @@ rule "Level 4 - Recommend Waiter Reward"
         Recommendation rec = new Recommendation();
         rec.setType(Type.WAITER_REWARD);
         rec.setSubject($fact.getWaiterName());
-        rec.setExplanation($fact.getWaiterName() + " je konzistentno dobar - preporučuje se nagrada.");
+        rec.setExplanation($fact.getWaiterName() + " is consistently good - recommend a reward.");
         insert(rec);
         recommendations.add(rec);
 end
